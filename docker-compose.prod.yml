@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  web:
+    image: ${IMAGE_TAG}
+    container_name: wecom-prod
+    ports:
+      - "80:8000"
+    env_file:
+      - ./src/config/.env
+    restart: always
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: wecom-redis-prod
+    ports:
+      - "6379:6379"
+    restart: always
