@@ -1,18 +1,32 @@
 version: '3.8'
 
 services:
-  web:
+  app:
     image: ${IMAGE_TAG}
     container_name: wecom-staging
+    build: .
+    env_file:
+      - ./configs/dev.env
     ports:
       - "8000:8000"
-    env_file:
-      - ./src/config/.env
     depends_on:
-      - redis
+      - postgres
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:6.2-alpine
     container_name: wecom-redis-staging
     ports:
       - "6379:6379"
+    restart: always
+
+volumes:
+  postgres_data:
