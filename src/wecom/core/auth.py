@@ -1,6 +1,5 @@
 # 基于HMAC的多企业认证
-import secrets
-import string
+
 import hashlib
 import hmac
 from fastapi import HTTPException, Request
@@ -10,10 +9,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from ..db.models import Enterprise
 from ..config import get_settings
 
-def generate_api_key(length=32):
-    """生成安全的随机API Key"""
-    alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 class SecretManager:
     def __init__(self, master_key=None):
