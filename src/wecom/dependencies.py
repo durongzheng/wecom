@@ -4,8 +4,7 @@ from jose import JWTError, jwt
 from pydantic import ValidationError
 
 # 注意这里的相对路径引用
-from .config.settings import get_settings  
-from .models.subscription_models import TokenData
+from .config import get_settings  
 from .db import crud, database
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")

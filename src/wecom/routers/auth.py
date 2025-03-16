@@ -5,7 +5,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from ..models.subscription_models import Token, SubscriberCreate, SubscriberInDB
-from ..config.settings import get_settings
+from ..config import get_settings
 from ..db import crud
 
 router = APIRouter()

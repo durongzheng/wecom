@@ -46,3 +46,19 @@ docker run -d \
   -p 8000:8000 \
   wecom
 ```
+
+```mermaid
+graph TD
+    A[API Gateway] --> B[Auth Service]
+    A --> C[WeCom Service]
+    A --> D[Enterprise Service]
+    B --> E[(Auth DB)]
+    C --> F[(Biz DB)]
+    D --> F
+```
+请求处理流程：
+```Plain Text
+客户端请求 → API网关 → 认证服务 → 负载企业配置 → 路由到对应微服务
+           ↓
+       监控埋点 → 日志中心
+```

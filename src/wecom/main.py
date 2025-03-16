@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from .routers import auth, notify
 from .db import database
-from .config.settings import get_settings
+from .config import get_settings
 app = FastAPI()
 
 def validate_config():

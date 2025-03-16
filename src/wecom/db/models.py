@@ -13,3 +13,14 @@ class Subscriber(Base):
     subscription_tier = Column(String(20), default="basic")
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+
+# 企业模型示例
+class Enterprise(Base):
+    __tablename__ = "enterprises"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), unique=True)
+    api_key = Column(String(64), unique=True)
+    secret_key = Column(String(64))
+    wecom_corp_id = Column(String(64))
+    wecom_secret = Column(String(64))
+    db_cluster = Column(String(100))  # 分库配置
