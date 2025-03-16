@@ -1,0 +1,54 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  COMPOSE_PROJECT_NAME: wecom
+
+test:
+  stage: test
+  image: python:3.11
+  script:
+    - pip install pytest
+    - pytest tests/
+
+build-image:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - echo "Logging in to GitLab Container Registry..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - echo "Building Docker image..."
+    - docker build -t $IMAGE_TAG .
+    - echo "Pushing Docker image..."
+    - docker push $IMAGE_TAG
+
+deploy-staging:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - echo "Deploying to staging environment..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $IMAGE_TAG
+    - docker-compose -f docker-compose.staging.yml up -d
+  only:
+    - develop
+
+deploy-prod:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - echo "Deploying to production environment..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $IMAGE_TAG
+    - docker-compose -f docker-compose.prod.yml up -d
+  only:
+    - main
