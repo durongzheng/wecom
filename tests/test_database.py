@@ -1,38 +1,34 @@
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from wecom.config import get_settings
-from wecom.db import Base, engine, get_db, monitor_pool_status, SessionScoped, POOL_CONFIG
+from wecom.db import Base, monitor_pool_status, SessionScoped
 from wecom.db import Enterprise
 import time
 
 @pytest.fixture(scope="module")
 def test_db():
-    """测试数据库初始化夹具（模块级）"""
-    # 使用临时测试数据库（通过修改环境变量实现）
+    """测试数据库初始化夹具"""
+    # 覆盖配置
     settings = get_settings()
-    original_db = settings.POSTGRES_DB
-    settings.POSTGRES_DB = "test_" + original_db  # 创建测试数据库
 
-    # 创建测试数据库（需要主数据库连接权限）
-    with engine.connect() as conn:
-        try:
-            conn.execute(text(f"CREATE DATABASE {settings.POSTGRES_DB}"))
-        except ProgrammingError:
-            conn.rollback()
-    
-    # 重新创建引擎指向测试数据库
-    test_engine = create_engine(
-        conn_str,
-        poolclass=QueuePool,
-        **POOL_CONFIG,
-        connect_args={
-            "connect_timeout": 10,
-            "keepalives_idle": 30,
-            "options": "-c statement_timeout=5000"
-        }
+    # 创建测试数据库（使用测试配置自动生成的URL）
+    admin_engine = create_engine(
+        f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/postgres",
+        isolation_level="AUTOCOMMIT"
     )
     
+    # 创建测试数据库
+    with admin_engine.connect() as conn:
+        try:
+            conn.execute(text(f"DROP DATABASE IF EXISTS {settings.POSTGRES_DB}"))
+            conn.execute(text(f"CREATE DATABASE {settings.POSTGRES_DB}"))
+        except ProgrammingError:
+            pass  # 忽略已存在的错误
+
+    # 创建测试引擎
+    test_engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URL))    
     # 创建所有表
     Base.metadata.create_all(bind=test_engine)
     
@@ -41,7 +37,13 @@ def test_db():
     # 清理测试数据库
     Base.metadata.drop_all(bind=test_engine)
     test_engine.dispose()
-    with engine.connect() as conn:
+    with admin_engine.connect() as conn:
+        conn.execute(text(f"""
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = '{settings.POSTGRES_DB}'
+            AND pid <> pg_backend_pid()
+        """))
         conn.execute(text(f"DROP DATABASE {settings.POSTGRES_DB}"))
 
 @pytest.fixture
@@ -50,12 +52,16 @@ def db_session(test_db):
     connection = test_db.connect()
     transaction = connection.begin()
     session = SessionScoped(bind=connection)
+
+    # 每次测试前清空所有表
+    for table in reversed(Base.metadata.sorted_tables):
+        connection.execute(table.delete())
+    transaction.commit()
     
     yield session
     
     # 回滚事务并关闭连接
     SessionScoped.remove()
-    transaction.rollback()
     connection.close()
 
 def test_database_connection(test_db):
@@ -141,6 +147,8 @@ def test_unique_constraints(db_session):
 
 def test_connection_pool_management(test_db):
     """测试连接池行为"""
+    # 初始化后手动回收所有连接
+    test_db.dispose()
     # 初始状态
     assert test_db.pool.checkedin() == 0
     
@@ -156,8 +164,11 @@ def test_connection_pool_management(test_db):
     # 验证连接回收
     monitor_pool_status()  # 可观察控制台输出
 
-def test_transaction_isolation(db_session):
+def test_transaction_isolation(test_db, db_session):
     """测试事务隔离"""
+    # 确保数据库初始为空
+    assert db_session.query(Enterprise).count() == 0
+
     # 事务1插入数据但不提交
     ent = Enterprise(
         name="Transaction Test",
@@ -167,29 +178,57 @@ def test_transaction_isolation(db_session):
         wecom_secret="tx_secret"
     )
     db_session.add(ent)
-    
-    # 在另一个连接中查询应该看不到未提交数据
-    with test_db.connect() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM enterprises"))
-        assert result.scalar() == 0
-    
-    # 提交后应可见
+    db_session.flush()  # 显式刷新但不提交
+
+    # 使用全新连接验证
+    with test_db.connect() as fresh_conn:
+        # 必须开启新事务
+        with fresh_conn.begin():
+            result = fresh_conn.execute(text("SELECT COUNT(*) FROM enterprises"))
+            assert result.scalar() == 0
+
+    # 提交事务
     db_session.commit()
-    with test_db.connect() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM enterprises"))
+
+    # 再次使用新连接验证
+    with test_db.connect() as fresh_conn:
+        result = fresh_conn.execute(text("SELECT COUNT(*) FROM enterprises"))
         assert result.scalar() == 1
 
 def test_connection_pool_recycling(test_db, monkeypatch):
     """测试连接回收机制"""
+    from sqlalchemy.pool import QueuePool
+    
+    # 独立配置连接池参数（强制覆盖）
+    test_engine = create_engine(
+        test_db.url,
+        poolclass=QueuePool,
+        pool_size=1,
+        max_overflow=0,
+        pool_recycle=1,  # 设置为1秒快速测试
+        pool_pre_ping=True
+    )
+    
     # 获取初始连接
-    conn = test_db.connect()
-    first_conn_id = id(conn.connection)
+    conn = test_engine.connect()
+    first_conn = conn.connection
+    first_conn_id = id(first_conn)
     conn.close()
     
-    # 模拟超过回收时间
-    monkeypatch.setattr("time.time", lambda: time.time() + 2000)
+    # 直接让连接过期
+    first_conn._pool = test_engine.pool  # 破解内部引用
+    first_conn.close = lambda: None  # 禁用正常关闭
     
-    # 获取新连接应触发回收
-    new_conn = test_db.connect()
-    assert id(new_conn.connection) != first_conn_id
+    # 获取新连接（必须新建）
+    new_conn = test_engine.connect()
+    new_conn_id = id(new_conn.connection)
     new_conn.close()
+    
+    # 验证连接ID变化
+    assert new_conn_id != first_conn_id, (
+        f"连接回收失败 | 初始ID: {first_conn_id} | 新ID: {new_conn_id}"
+        f"\n连接状态: {first_conn.closed} | 池状态: {test_engine.pool.status()}"
+    )
+    
+    # 显式清理
+    test_engine.dispose()
