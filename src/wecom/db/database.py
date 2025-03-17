@@ -1,9 +1,9 @@
-# database.py 优化版
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.pool import QueuePool
 from sqlalchemy import event
+from sqlalchemy.engine import make_url
 from ..config import get_settings
 import logging
 import time
@@ -25,13 +25,13 @@ POOL_CONFIG = {
 def setup_connection_pool():
     """创建带连接池的引擎"""
     # 构建连接字符串
-    conn_str = settings.SQLALCHEMY_DATABASE_URL
+    conn_str = make_url(str(settings.SQLALCHEMY_DATABASE_URL))
     
     # 创建带连接池的引擎
     engine = create_engine(
         conn_str,
         poolclass=QueuePool,  # 使用队列连接池
-        ​**POOL_CONFIG,
+        **POOL_CONFIG,
         connect_args={
             "connect_timeout": 10,      # 连接超时设置
             "keepalives_idle": 30,      # TCP保活
