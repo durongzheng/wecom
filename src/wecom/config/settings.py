@@ -58,7 +58,7 @@ class Settings(BaseSettings):
             password=self.POSTGRES_PASSWORD,
             host=self.POSTGRES_HOST,
             port=self.POSTGRES_PORT,
-            path=f"/{self.POSTGRES_DB}"
+            path=f"{self.POSTGRES_DB}"
         )
 
     @property
@@ -68,7 +68,7 @@ class Settings(BaseSettings):
             scheme="redis",
             host=self.REDIS_HOST,
             port=self.REDIS_PORT,
-            path=f"/{self.REDIS_DB}"
+            path=f"{self.REDIS_DB}"
         )
 
     class Config:
@@ -78,13 +78,3 @@ class Settings(BaseSettings):
 
 def get_settings():
     return Settings()
-
-# 测试配置
-if __name__ == "__main__":
-    settings = get_settings()
-    print("Database URL:", settings.SQLALCHEMY_DATABASE_URL)
-    print("Redis URL:", settings.REDIS_URL)
-    print("Pool Config:", {
-        "pool_size": settings.POOL_SIZE,
-        "max_overflow": settings.MAX_OVERFLOW
-    })
