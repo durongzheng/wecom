@@ -24,7 +24,7 @@ def test_default_config():
 
 def test_database_url(mock_env):
     settings = get_settings()
-    expected = "postgresql://test_user:test_pass@localhost:5433/wecom"
+    expected = "postgresql://test_user:test_pass@localhost:5433/test_wecom"
     assert str(settings.SQLALCHEMY_DATABASE_URL) == expected
 
 def test_redis_url(mock_env):

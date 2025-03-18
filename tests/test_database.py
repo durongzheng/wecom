@@ -195,7 +195,7 @@ def test_transaction_isolation(test_db, db_session):
         result = fresh_conn.execute(text("SELECT COUNT(*) FROM enterprises"))
         assert result.scalar() == 1
 
-def test_connection_pool_recycling(test_db, monkeypatch):
+def test_connection_pool_recycling(test_db):
     """测试连接回收机制"""
     from sqlalchemy.pool import QueuePool
     
