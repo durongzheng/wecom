@@ -12,11 +12,11 @@ class WeComClient:
         cache_key = f"wecom_token:{self.corp_id}"
         token = self.redis.get(cache_key)
         if not token:
-            url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corp_id}&corpsecret={self.secret}"
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/service/get_provider_token?corpid={self.corp_id}&provider_secret={self.secret}"
             resp = requests.get(url).json()
             if resp["errcode"] != 0:
                 raise Exception(f"Get token failed: {resp['errmsg']}")
-            token = resp["access_token"].encode()
+            token = resp["provider_access_token"].encode()
             self.redis.setex(cache_key, 7000, token)  # 实际有效7200秒
         return token.decode()
 
